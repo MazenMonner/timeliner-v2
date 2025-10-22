@@ -1,0 +1,61 @@
+name: Build Android Debug APK (Vite + Capacitor)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      WEB_DIR: dist
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Capacitor CLI
+        run: npm install @capacitor/core @capacitor/cli --no-save
+
+      - name: Build web (Vite)
+        run: npm run build
+
+      - name: Setup Java 21 # ⚙️ CHANGED NAME TO REFLECT NEW VERSION
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21' # 💥 FIX: Changed from '17' to '21'
+          
+      # --- REMOVED: The 'Setup Android SDK (helper)' step that caused the error ---
+
+      - name: Install Capacitor packages
+        run: npm install @capacitor/core @capacitor/cli @capacitor/android --no-save
+
+      - name: Ensure android/ exists (init if missing)
+        run: |
+          if [ -d "android" ]; then
+            echo "android/ exists — skipping init"
+          else
+            echo "android/ missing — initialising"
+            npx cap init "TimeLiner" com.example.myapp --web-dir=$WEB_DIR
+            npx cap add android
+          fi
+
+      - name: Copy web assets to android
+        run: npx cap copy android
+
+      - name: Build debug APK
+        working-directory: android
+        run: ./gradlew assembleDebug --no-daemon
+
+      - name: Upload debug APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-debug-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
